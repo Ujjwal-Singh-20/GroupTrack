@@ -54,6 +54,18 @@ class StorageApi:
             print("[StorageApi] Error loading from disk:", e)
         return None
 
+    def export_file(self, content_str, filename):
+        try:
+            downloads_dir = os.path.join(os.path.expanduser('~'), 'Downloads')
+            os.makedirs(downloads_dir, exist_ok=True)
+            target_path = os.path.join(downloads_dir, filename)
+            with open(target_path, 'w', encoding='utf-8') as f:
+                f.write(content_str)
+            return target_path
+        except Exception as e:
+            print("[StorageApi] Error exporting file to Downloads:", e)
+            return None
+
 def start_local_server(preferred_port=FIXED_PORT):
     socketserver.TCPServer.allow_reuse_address = True
     for offset in range(10):

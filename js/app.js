@@ -46,8 +46,9 @@
       toast.style.transform = 'translateY(6px)';
       toast.style.transition = 'all 0.25s ease';
       setTimeout(() => toast.remove(), 260);
-    }, 2800);
+    }, 3500);
   }
+  window.showToast = showToast;
 
   // Multi-Section Tab Rendering
   function renderSectionTabs() {

@@ -163,16 +163,43 @@
       window.print();
     }
 
-    downloadFile(content, fileName, mimeType) {
-      const blob = new Blob([content], { type: mimeType });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileName;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+    async downloadFile(content, fileName, mimeType) {
+      let nativeSavedPath = null;
+
+      // 1. If running in native desktop app, save directly to Windows Downloads folder
+      if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.export_file === 'function') {
+        try {
+          nativeSavedPath = await window.pywebview.api.export_file(content, fileName);
+        } catch (err) {
+          console.warn('[ExportManager] Native bridge export error:', err);
+        }
+      }
+
+      // 2. Standard browser download trigger
+      try {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        console.warn('[ExportManager] Browser a-tag download error:', err);
+      }
+
+      // 3. Show prominent toast notification confirming file location
+      const message = nativeSavedPath
+        ? `📁 Saved to Downloads: ${fileName}`
+        : `📁 Exported "${fileName}" (Saved in your Downloads folder)`;
+
+      if (typeof window.showToast === 'function') {
+        window.showToast(message, 'success');
+      } else {
+        alert(message);
+      }
     }
   }
 
