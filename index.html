@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GroupTrack - Project & Review Tracker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <!-- Local SheetJS for offline Excel/CSV parsing -->
+  <script src="xlsx.full.min.js"></script>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Top Navigation & Brand Header -->
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/>
+            <path d="M6 6h10"/>
+            <path d="M6 10h10"/>
+            <path d="M6 14h6"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">GroupTrack</h1>
+          <span class="brand-badge">Local Offline Engine</span>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Strip -->
+      <div class="metrics-strip">
+        <div class="metric-pill" title="Total Students in Section">
+          <span class="metric-label">Students</span>
+          <span class="metric-value" id="stat-total-students">0</span>
+        </div>
+        <div class="metric-pill" title="Unassigned Students">
+          <span class="metric-label">Unassigned</span>
+          <span class="metric-value pastel-amber" id="stat-unassigned">0</span>
+        </div>
+        <div class="metric-pill" title="Total Project Groups">
+          <span class="metric-label">Groups</span>
+          <span class="metric-value pastel-sky" id="stat-groups">0</span>
+        </div>
+        <div class="metric-pill" title="Total Review Check-ins">
+          <span class="metric-label">Reviews</span>
+          <span class="metric-value pastel-mint" id="stat-reviews">0</span>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="nav-actions">
+        <!-- Hidden file input for Excel / CSV -->
+        <input type="file" id="file-uploader" accept=".xlsx, .xls, .csv" style="display:none" />
+        
+        <button id="btn-upload" class="btn btn-primary" title="Upload student roster from Excel (.xlsx) or CSV">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+          </svg>
+          Upload Sheet
+        </button>
+
+        <button id="btn-sample-data" class="btn btn-ghost" title="Load sample student list to test immediately">
+          Load Sample
+        </button>
+
+        <!-- Data & Export Menu -->
+        <div class="dropdown">
+          <button id="btn-data-menu" class="btn btn-ghost" title="Export or manage section data">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="1"/>
+              <circle cx="12" cy="5" r="1"/>
+              <circle cx="12" cy="19" r="1"/>
+            </svg>
+            Export & Data
+          </button>
+          <div class="dropdown-menu" id="data-dropdown">
+            <button id="btn-export-csv" class="dropdown-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export Section Status (CSV)
+            </button>
+            <button id="btn-export-all-csv" class="dropdown-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Export All Sections (CSV)
+            </button>
+            <button id="btn-print-summary" class="dropdown-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              Print / Save PDF Report
+            </button>
+            <div class="dropdown-divider"></div>
+            <button id="btn-export-json" class="dropdown-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+              Full Backup (JSON)
+            </button>
+            <button id="btn-import-json-trigger" class="dropdown-item">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Restore Backup (JSON)
+            </button>
+            <input type="file" id="json-file-input" accept=".json" style="display:none" />
+            <div class="dropdown-divider"></div>
+            <button id="btn-clear-section" class="dropdown-item danger">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              Clear Current Section
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Multi-Section Tab Strip -->
+    <div class="sections-tab-strip">
+      <div class="section-tabs-container" id="section-tabs-list">
+        <!-- Section tabs rendered dynamically -->
+      </div>
+      <button id="btn-add-section" class="btn-new-section" title="Create a new section/batch">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"/>
+          <line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        New Section
+      </button>
+    </div>
+
+    <!-- Print Only Header -->
+    <div class="print-header">
+      <h2 class="print-title">Group Project & Review Status Report</h2>
+      <div class="print-meta">
+        <span>Section: <strong id="print-section-name">Section A</strong></span>
+        <span>Generated: <strong id="print-date"></strong></span>
+      </div>
+    </div>
+
+    <!-- Main Workspace Split Pane -->
+    <main class="main-body">
+      <!-- Left Column: Student Roster -->
+      <aside class="students-panel">
+        <div class="panel-header">
+          <div class="panel-title-row">
+            <h2 class="panel-title">Students Roster</h2>
+            <span class="count-tag" id="students-badge">0</span>
+          </div>
+
+          <!-- Search Input -->
+          <div class="search-box">
+            <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="search-students" placeholder="Search name, roll..." autocomplete="off" />
+            <button id="clear-search-student" class="clear-btn" style="display:none">&times;</button>
+          </div>
+
+          <!-- Filter Pills -->
+          <div class="filter-pills">
+            <button class="student-filter-pill active" data-filter="all">All</button>
+            <button class="student-filter-pill" data-filter="unassigned">Unassigned</button>
+            <button class="student-filter-pill" data-filter="assigned">Assigned</button>
+          </div>
+
+          <!-- Selection Action Bar -->
+          <div class="selection-bar">
+            <div class="select-actions">
+              <button id="btn-select-all" class="link-btn">Select All</button>
+              <span class="sep">•</span>
+              <button id="btn-deselect-all" class="link-btn">Clear</button>
+            </div>
+            <button id="btn-create-group-selected" class="btn btn-accent btn-sm" disabled>
+              Create Group (<span id="selected-count">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- Student Roster List -->
+        <div class="student-list" id="student-list-container">
+          <!-- Populated by js/roster.js -->
+        </div>
+      </aside>
+
+      <!-- Right Column: Project Groups -->
+      <section class="groups-panel">
+        <div class="panel-header">
+          <div class="panel-title-row">
+            <div class="groups-title-wrap">
+              <h2 class="panel-title">Project Groups</h2>
+              <span class="count-tag" id="groups-badge">0</span>
+            </div>
+
+            <!-- Group Toolbar -->
+            <div class="groups-toolbar">
+              <div class="search-box small">
+                <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input type="text" id="search-groups" placeholder="Search idea, title..." autocomplete="off" />
+              </div>
+
+              <select id="filter-group-status" class="select-input">
+                <option value="all">All Statuses</option>
+                <option value="Ideation">Ideation</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Needs Changes">Needs Changes</option>
+                <option value="Approved">Approved</option>
+                <option value="Completed">Completed</option>
+              </select>
+
+              <button id="btn-manual-new-group" class="btn btn-outline btn-sm">
+                + New Group
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Groups Cards Container -->
+        <div class="groups-container" id="groups-container">
+          <!-- Populated by js/groups.js -->
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: Dynamic Column Mapper -->
+  <div class="modal-overlay" id="modal-mapper" style="display:none">
+    <div class="modal-box mapper-box">
+      <div class="modal-header">
+        <div>
+          <h3>Map Sheet Columns</h3>
+          <span class="modal-subtitle" id="mapper-file-info">File: roster.xlsx</span>
+        </div>
+        <button class="modal-close" id="modal-mapper-close">&times;</button>
+      </div>
+
+      <div class="modal-body-scroll">
+        <p class="form-hint" style="margin-bottom:12px;">
+          Match the columns from your sheet. Order does not matter.
+        </p>
+
+        <!-- Dropdowns Grid -->
+        <div class="mapper-dropdowns-grid">
+          <div class="form-group">
+            <label for="mapper-select-roll">Roll No / ID Column *</label>
+            <select id="mapper-select-roll" class="select-input"></select>
+          </div>
+          <div class="form-group">
+            <label for="mapper-select-name">Student Name Column *</label>
+            <select id="mapper-select-name" class="select-input"></select>
+          </div>
+          <div class="form-group">
+            <label for="mapper-select-dept">Dept / Section / Course (Optional)</label>
+            <select id="mapper-select-dept" class="select-input"></select>
+          </div>
+          <div class="form-group">
+            <label for="mapper-select-email">Email Address (Optional)</label>
+            <select id="mapper-select-email" class="select-input"></select>
+          </div>
+        </div>
+
+        <!-- Preview Table -->
+        <div class="mapper-preview-wrap">
+          <div class="preview-title">Preview First Rows:</div>
+          <div class="preview-table-scroll">
+            <table class="preview-table" id="mapper-preview-table">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="btn-mapper-cancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="btn-mapper-confirm">Confirm & Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Create / Edit Group -->
+  <div class="modal-overlay" id="modal-group" style="display:none">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="modal-group-title">Create Project Group</h3>
+        <button class="modal-close" id="modal-group-close">&times;</button>
+      </div>
+      <form id="form-group" class="modal-form">
+        <input type="hidden" id="form-group-id" />
+
+        <div class="form-row two-col">
+          <div class="form-group">
+            <label for="group-name-input">Group Name / ID *</label>
+            <input type="text" id="group-name-input" placeholder="e.g. Group 01" required />
+          </div>
+          <div class="form-group">
+            <label for="group-status-input">Status</label>
+            <select id="group-status-input" class="select-input">
+              <option value="Ideation">Ideation</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Needs Changes">Needs Changes</option>
+              <option value="Approved">Approved</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="group-project-title">Project Title *</label>
+          <input type="text" id="group-project-title" placeholder="e.g. Distributed IoT Mesh Network" required />
+        </div>
+
+        <div class="form-group">
+          <label for="group-project-idea">Project Idea & Scope</label>
+          <textarea id="group-project-idea" rows="3" placeholder="Brief problem statement, hardware, or tech stack..."></textarea>
+        </div>
+
+        <div class="form-row two-col">
+          <div class="form-group">
+            <label for="group-score">Grade / Marks (Optional)</label>
+            <input type="text" id="group-score" placeholder="e.g. 85/100 or A" />
+          </div>
+          <div class="form-group">
+            <label for="group-next-deadline">Next Target Date</label>
+            <input type="date" id="group-next-deadline" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Members in this Group (<span id="modal-member-count">0</span>)</label>
+          <div class="modal-member-chips" id="modal-members-list"></div>
+          <span class="form-hint">Tip: Check students from the left list to bundle them into this group.</span>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="btn-cancel-group">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Group</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Log Review Feedback -->
+  <div class="modal-overlay" id="modal-review" style="display:none">
+    <div class="modal-box small">
+      <div class="modal-header">
+        <h3>Log Review Check-In</h3>
+        <button class="modal-close" id="modal-review-close">&times;</button>
+      </div>
+      <form id="form-review" class="modal-form">
+        <input type="hidden" id="review-group-id" />
+
+        <div class="review-target-info">
+          <span class="group-target-name" id="review-target-group-name">Group 1</span>
+          <span class="group-target-project" id="review-target-project-name">Project Title</span>
+        </div>
+
+        <div class="form-row two-col">
+          <div class="form-group">
+            <label for="review-date">Date</label>
+            <input type="date" id="review-date" required />
+          </div>
+          <div class="form-group">
+            <label for="review-status-update">Update Status</label>
+            <select id="review-status-update" class="select-input">
+              <option value="">Keep current</option>
+              <option value="Ideation">Ideation</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Needs Changes">Needs Changes</option>
+              <option value="Approved">Approved</option>
+              <option value="Completed">Completed</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="review-notes">Demonstrated Work & Feedback *</label>
+          <textarea id="review-notes" rows="3" placeholder="What did they demonstrate? Action items for next check-in..." required></textarea>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="btn-cancel-review">Cancel</button>
+          <button type="submit" class="btn btn-accent">Save Review</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Review History Viewer -->
+  <div class="modal-overlay" id="modal-history" style="display:none">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="history-modal-title">Review History Timeline</h3>
+        <button class="modal-close" id="modal-history-close">&times;</button>
+      </div>
+      <div class="history-content">
+        <div id="history-timeline" class="history-timeline"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="btn-close-history">Close</button>
+        <button type="button" class="btn btn-accent btn-sm" id="btn-history-add-new">+ Add New Review</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Application Scripts -->
+  <script src="js/storage.js"></script>
+  <script src="js/mapper.js"></script>
+  <script src="js/roster.js"></script>
+  <script src="js/groups.js"></script>
+  <script src="js/export.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
