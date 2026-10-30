@@ -332,6 +332,88 @@
       }
     }
 
+    addSingleStudent(studentData) {
+      const sec = this.getActiveSection();
+      if (!sec) return { success: false, message: 'No active section' };
+
+      const roll = String(studentData.roll || '').trim();
+      const name = String(studentData.name || '').trim();
+      if (!roll || !name) {
+        return { success: false, message: 'Roll number and student name are required' };
+      }
+
+      const rollKey = roll.toLowerCase();
+      const exists = sec.students.some((s) => String(s.roll || '').trim().toLowerCase() === rollKey);
+      if (exists) {
+        return { success: false, message: `Roll number "${roll}" already exists in this section` };
+      }
+
+      const newStudent = {
+        id: 'stu_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        roll: roll,
+        name: name,
+        email: String(studentData.email || '').trim(),
+        dept: String(studentData.dept || '').trim(),
+        groupId: null,
+      };
+
+      sec.students.push(newStudent);
+      this.save();
+      return { success: true, student: newStudent };
+    }
+
+    updateStudent(studentId, updatedData) {
+      const sec = this.getActiveSection();
+      if (!sec) return { success: false, message: 'No active section' };
+
+      const stu = sec.students.find((s) => s.id === studentId);
+      if (!stu) return { success: false, message: 'Student not found' };
+
+      const newRoll = String(updatedData.roll || '').trim();
+      const newName = String(updatedData.name || '').trim();
+      if (!newRoll || !newName) {
+        return { success: false, message: 'Roll number and student name are required' };
+      }
+
+      const rollKey = newRoll.toLowerCase();
+      const duplicate = sec.students.some(
+        (s) => s.id !== studentId && String(s.roll || '').trim().toLowerCase() === rollKey
+      );
+      if (duplicate) {
+        return { success: false, message: `Another student already has roll number "${newRoll}"` };
+      }
+
+      stu.roll = newRoll;
+      stu.name = newName;
+      if (updatedData.email !== undefined) stu.email = String(updatedData.email || '').trim();
+      if (updatedData.dept !== undefined) stu.dept = String(updatedData.dept || '').trim();
+
+      this.save();
+      return { success: true, student: stu };
+    }
+
+    deleteStudent(studentId) {
+      const sec = this.getActiveSection();
+      if (!sec) return { success: false, message: 'No active section' };
+
+      const stuIdx = sec.students.findIndex((s) => s.id === studentId);
+      if (stuIdx === -1) return { success: false, message: 'Student not found' };
+
+      const stu = sec.students[stuIdx];
+
+      // If student was assigned to a group, remove from group's memberIds
+      if (stu.groupId) {
+        const grp = sec.groups.find((g) => g.id === stu.groupId);
+        if (grp && Array.isArray(grp.memberIds)) {
+          grp.memberIds = grp.memberIds.filter((id) => id !== studentId);
+        }
+      }
+
+      sec.students.splice(stuIdx, 1);
+      this.save();
+      return { success: true };
+    }
+
     // --- Group Management (Scoped to Active Section) ---
     getGroups() {
       const sec = this.getActiveSection();

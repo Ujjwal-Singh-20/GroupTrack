@@ -454,6 +454,12 @@ body {
   margin-bottom: 10px;
 }
 
+.panel-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .panel-title {
   font-size: 0.98rem;
   font-weight: 700;
@@ -690,6 +696,44 @@ body {
 .student-dept-tag {
   font-size: 0.67rem;
   color: var(--text-muted);
+}
+
+.student-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  opacity: 0.35;
+  transition: opacity 0.15s ease;
+}
+
+.student-item:hover .student-item-actions,
+.student-item:focus-within .student-item-actions {
+  opacity: 1;
+}
+
+.btn-icon-subtle {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.12s, color 0.12s;
+}
+
+.btn-icon-subtle:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.btn-icon-subtle.danger:hover {
+  background: var(--pastel-coral-bg);
+  color: var(--pastel-coral);
 }
 
 /* Empty State */

@@ -5,6 +5,7 @@
  *  - High-performance filtering (All, Unassigned, Assigned) & instant search
  *  - Checkbox multi-selection for group bundling
  *  - Select All / Clear shortcuts and group creation trigger
+ *  - Full CRUD operations: Manual Add, Edit, and Delete student
  */
 
 (function (window) {
@@ -18,6 +19,7 @@
       this.onCreateGroupTrigger = null;
 
       this.initDom();
+      this.initModalEvents();
     }
 
     initDom() {
@@ -31,6 +33,20 @@
       this.btnDeselectAll = document.getElementById('btn-deselect-all');
       this.btnCreateGroup = document.getElementById('btn-create-group-selected');
       this.selectedCountSpan = document.getElementById('selected-count');
+
+      // CRUD Modal DOM elements
+      this.btnAddStudent = document.getElementById('btn-manual-add-student');
+      this.modalStudent = document.getElementById('modal-student');
+      this.modalStudentClose = document.getElementById('modal-student-close');
+      this.modalStudentTitle = document.getElementById('modal-student-title');
+      this.btnCancelStudent = document.getElementById('btn-cancel-student');
+      this.formStudent = document.getElementById('form-student');
+
+      this.inputStudentId = document.getElementById('student-id-input');
+      this.inputRoll = document.getElementById('student-roll-input');
+      this.inputName = document.getElementById('student-name-input');
+      this.inputDept = document.getElementById('student-dept-input');
+      this.inputEmail = document.getElementById('student-email-input');
 
       // Search input listener
       if (this.searchInput) {
@@ -77,6 +93,169 @@
             this.onCreateGroupTrigger(Array.from(this.selectedIds));
           }
         });
+      }
+    }
+
+    initModalEvents() {
+      if (this.btnAddStudent) {
+        this.btnAddStudent.addEventListener('click', () => this.openAddModal());
+      }
+
+      if (this.modalStudentClose) {
+        this.modalStudentClose.addEventListener('click', () => this.closeModal());
+      }
+
+      if (this.btnCancelStudent) {
+        this.btnCancelStudent.addEventListener('click', () => this.closeModal());
+      }
+
+      if (this.modalStudent) {
+        this.modalStudent.addEventListener('click', (e) => {
+          if (e.target === this.modalStudent) this.closeModal();
+        });
+      }
+
+      if (this.formStudent) {
+        this.formStudent.addEventListener('submit', (e) => this.handleSaveStudent(e));
+      }
+
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && this.modalStudent && this.modalStudent.style.display === 'flex') {
+          this.closeModal();
+        }
+      });
+    }
+
+    openAddModal() {
+      if (!this.modalStudent) return;
+      if (this.modalStudentTitle) this.modalStudentTitle.textContent = 'Add Student';
+      if (this.formStudent) this.formStudent.reset();
+      if (this.inputStudentId) this.inputStudentId.value = '';
+
+      this.modalStudent.style.display = 'flex';
+      setTimeout(() => {
+        if (this.inputRoll) this.inputRoll.focus();
+      }, 50);
+    }
+
+    openEditModal(studentId) {
+      if (!this.modalStudent) return;
+      const students = window.StorageManager.getStudents();
+      const s = students.find((item) => item.id === studentId);
+      if (!s) return;
+
+      if (this.modalStudentTitle) this.modalStudentTitle.textContent = 'Edit Student';
+      if (this.inputStudentId) this.inputStudentId.value = s.id;
+      if (this.inputRoll) this.inputRoll.value = s.roll || '';
+      if (this.inputName) this.inputName.value = s.name || '';
+      if (this.inputDept) this.inputDept.value = s.dept || '';
+      if (this.inputEmail) this.inputEmail.value = s.email || '';
+
+      this.modalStudent.style.display = 'flex';
+      setTimeout(() => {
+        if (this.inputName) this.inputName.focus();
+      }, 50);
+    }
+
+    closeModal() {
+      if (!this.modalStudent) return;
+      this.modalStudent.style.display = 'none';
+      if (this.formStudent) this.formStudent.reset();
+      if (this.inputStudentId) this.inputStudentId.value = '';
+    }
+
+    handleSaveStudent(e) {
+      e.preventDefault();
+
+      const studentId = this.inputStudentId ? this.inputStudentId.value.trim() : '';
+      const roll = this.inputRoll ? this.inputRoll.value.trim() : '';
+      const name = this.inputName ? this.inputName.value.trim() : '';
+      const dept = this.inputDept ? this.inputDept.value.trim() : '';
+      const email = this.inputEmail ? this.inputEmail.value.trim() : '';
+
+      if (!roll || !name) {
+        if (typeof window.showToast === 'function') {
+          window.showToast('Roll number and name are required', 'error');
+        } else {
+          alert('Roll number and name are required');
+        }
+        return;
+      }
+
+      if (studentId) {
+        // Update existing student
+        const res = window.StorageManager.updateStudent(studentId, { roll, name, dept, email });
+        if (!res.success) {
+          if (typeof window.showToast === 'function') {
+            window.showToast(res.message, 'error');
+          } else {
+            alert(res.message);
+          }
+          return;
+        }
+        if (typeof window.showToast === 'function') {
+          window.showToast(`Updated student "${name}"`, 'success');
+        }
+      } else {
+        // Create new student
+        const res = window.StorageManager.addSingleStudent({ roll, name, dept, email });
+        if (!res.success) {
+          if (typeof window.showToast === 'function') {
+            window.showToast(res.message, 'error');
+          } else {
+            alert(res.message);
+          }
+          return;
+        }
+        if (typeof window.showToast === 'function') {
+          window.showToast(`Added student "${name}"`, 'success');
+        }
+      }
+
+      this.closeModal();
+
+      if (typeof window.refreshAllData === 'function') {
+        window.refreshAllData();
+      } else {
+        this.render();
+        if (window.GroupEngine) window.GroupEngine.render();
+      }
+    }
+
+    handleDeleteStudent(studentId) {
+      const students = window.StorageManager.getStudents();
+      const s = students.find((item) => item.id === studentId);
+      if (!s) return;
+
+      const groupNote = s.groupId
+        ? '\n\nNote: This student will also be removed from their assigned project group.'
+        : '';
+      const confirmDelete = window.confirm(
+        `Are you sure you want to delete student "${s.name}" (${s.roll})?${groupNote}`
+      );
+      if (!confirmDelete) return;
+
+      const res = window.StorageManager.deleteStudent(studentId);
+      if (res && res.success) {
+        if (this.selectedIds.has(studentId)) {
+          this.selectedIds.delete(studentId);
+        }
+        if (typeof window.showToast === 'function') {
+          window.showToast(`Student "${s.name}" deleted`, 'info');
+        }
+        if (typeof window.refreshAllData === 'function') {
+          window.refreshAllData();
+        } else {
+          this.render();
+          if (window.GroupEngine) window.GroupEngine.render();
+        }
+      } else {
+        const errorMsg = res ? res.message : 'Failed to delete student';
+        if (typeof window.showToast === 'function') {
+          window.showToast(errorMsg, 'error');
+        } else {
+          alert(errorMsg);
+        }
       }
     }
 
@@ -168,7 +347,7 @@
               <line x1="16" y1="17" x2="8" y2="17"/>
             </svg>
             <p>No students in this section</p>
-            <span class="empty-subtitle">Upload a sheet or load sample students above</span>
+            <span class="empty-subtitle">Use "+ Add Student" or upload a sheet above</span>
           </div>`;
         this.updateSelectionUi();
         return;
@@ -209,9 +388,42 @@
               ${s.dept ? `<span class="student-dept-tag">${this.escapeHtml(s.dept)}</span>` : ''}
             </div>
           </div>
+          <div class="student-item-actions">
+            <button type="button" class="btn-icon-subtle btn-edit-student" title="Edit ${this.escapeHtml(s.name)}" data-id="${s.id}">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9"/>
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+            </button>
+            <button type="button" class="btn-icon-subtle danger btn-delete-student" title="Delete ${this.escapeHtml(s.name)}" data-id="${s.id}">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>
         `;
 
+        // Action buttons listeners
+        const editBtn = item.querySelector('.btn-edit-student');
+        if (editBtn) {
+          editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.openEditModal(s.id);
+          });
+        }
+
+        const delBtn = item.querySelector('.btn-delete-student');
+        if (delBtn) {
+          delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.handleDeleteStudent(s.id);
+          });
+        }
+
+        // Toggle checkbox on clicking item row
         item.addEventListener('click', (e) => {
+          if (e.target.closest('.student-item-actions')) return;
           if (e.target.tagName !== 'INPUT') {
             const chk = item.querySelector('.student-checkbox');
             if (chk) chk.checked = !chk.checked;

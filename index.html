@@ -140,8 +140,13 @@
       <aside class="students-panel">
         <div class="panel-header">
           <div class="panel-title-row">
-            <h2 class="panel-title">Students Roster</h2>
-            <span class="count-tag" id="students-badge">0</span>
+            <div class="panel-title-wrap">
+              <h2 class="panel-title">Students Roster</h2>
+              <span class="count-tag" id="students-badge">0</span>
+            </div>
+            <button id="btn-manual-add-student" class="btn btn-outline btn-sm" title="Manually add a student">
+              + Add Student
+            </button>
           </div>
 
           <!-- Search Input -->
@@ -398,6 +403,45 @@
         <button type="button" class="btn btn-ghost" id="btn-close-history">Close</button>
         <button type="button" class="btn btn-accent btn-sm" id="btn-history-add-new">+ Add New Review</button>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Add / Edit Student (CRUD) -->
+  <div class="modal-overlay" id="modal-student" style="display:none">
+    <div class="modal-box small">
+      <div class="modal-header">
+        <h3 id="modal-student-title">Add Student</h3>
+        <button class="modal-close" id="modal-student-close">&times;</button>
+      </div>
+      <form id="form-student" class="modal-form">
+        <input type="hidden" id="student-id-input" />
+
+        <div class="form-row two-col">
+          <div class="form-group">
+            <label for="student-roll-input">Roll Number *</label>
+            <input type="text" id="student-roll-input" placeholder="e.g. 21051234" required autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label for="student-dept-input">Department / Branch</label>
+            <input type="text" id="student-dept-input" placeholder="e.g. CSE / IT" autocomplete="off" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="student-name-input">Full Name *</label>
+          <input type="text" id="student-name-input" placeholder="e.g. Alex Johnson" required autocomplete="off" />
+        </div>
+
+        <div class="form-group">
+          <label for="student-email-input">Email (Optional)</label>
+          <input type="email" id="student-email-input" placeholder="e.g. alex@university.edu" autocomplete="off" />
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="btn-cancel-student">Cancel</button>
+          <button type="submit" class="btn btn-accent" id="btn-save-student">Save Student</button>
+        </div>
+      </form>
     </div>
   </div>
 
