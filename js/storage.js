@@ -2,15 +2,21 @@
  * GroupTrack - Storage & Multi-Section State Engine
  * Modules:
  *  - Multi-section schema management (Section A, Section B, etc.)
- *  - Isolated student rosters & group datasets per section
- *  - Auto-persistence with LocalStorage and schema migration
+ *  - Triple-Tier Persistence:
+ *      1. Direct Hard-Drive Disk Storage (%APPDATA%\GroupTrack\database.json) via Python Bridge
+ *      2. LocalStorage (Dual-Key Migration)
+ *      3. IndexedDB (Persistent Database Mirror)
+ *  - Backward compatibility auto-migration from previous versions
  *  - JSON backup and restore pipelines
  */
 
 (function (window) {
   'use strict';
 
-  const STORAGE_KEY = 'grouptrack_multisection_v2';
+  const STORAGE_KEY_V2 = 'grouptrack_multisection_v2';
+  const STORAGE_KEY_V1 = 'group_track_data_v1';
+  const DB_NAME = 'GroupTrackDB';
+  const DB_STORE = 'app_state';
 
   // Default initial section structure
   function createDefaultState() {
@@ -33,33 +39,195 @@
   class StorageManager {
     constructor() {
       this.state = this.load();
+      this.initIndexedDB();
+      this.initDesktopBridge();
     }
 
-    // Load from LocalStorage or initialize
+    // Connect to Python Desktop App Disk Bridge
+    initDesktopBridge() {
+      const syncWithDisk = async () => {
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.load_from_disk) {
+          try {
+            const diskJson = await window.pywebview.api.load_from_disk();
+            if (diskJson) {
+              const parsed = JSON.parse(diskJson);
+              if (parsed && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
+                this.state = parsed;
+                this.saveDirect(this.state);
+                // Trigger full UI refresh
+                if (typeof window.refreshAllData === 'function') {
+                  window.refreshAllData();
+                } else {
+                  if (window.StudentRoster) window.StudentRoster.render();
+                  if (window.GroupEngine) window.GroupEngine.render();
+                }
+                return;
+              }
+            }
+            // If disk file doesn't exist yet, save initial state to disk
+            this.save();
+          } catch (e) {
+            console.warn('[StorageManager] Desktop bridge load error:', e);
+          }
+        }
+      };
+
+      if (window.pywebview) {
+        syncWithDisk();
+      } else {
+        window.addEventListener('pywebviewready', syncWithDisk);
+      }
+    }
+
+    // Load from LocalStorage with backward compatibility migration
     load() {
       try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return createDefaultState();
-        const parsed = JSON.parse(raw);
-        if (!parsed.sections || !Array.isArray(parsed.sections) || parsed.sections.length === 0) {
-          return createDefaultState();
+        // 1. Try V2 multi-section key
+        const rawV2 = localStorage.getItem(STORAGE_KEY_V2);
+        if (rawV2) {
+          const parsed = JSON.parse(rawV2);
+          if (parsed && Array.isArray(parsed.sections) && parsed.sections.length > 0) {
+            if (!parsed.activeSectionId || !parsed.sections.some((s) => s.id === parsed.activeSectionId)) {
+              parsed.activeSectionId = parsed.sections[0].id;
+            }
+            return parsed;
+          }
+          if (parsed && (Array.isArray(parsed.students) || Array.isArray(parsed.groups))) {
+            return this.migrateFromV1(parsed);
+          }
         }
-        if (!parsed.activeSectionId || !parsed.sections.some((s) => s.id === parsed.activeSectionId)) {
-          parsed.activeSectionId = parsed.sections[0].id;
+
+        // 2. Try V1 flat key (backward compatibility with earlier version)
+        const rawV1 = localStorage.getItem(STORAGE_KEY_V1);
+        if (rawV1) {
+          const parsedV1 = JSON.parse(rawV1);
+          if (parsedV1 && (Array.isArray(parsedV1.students) || Array.isArray(parsedV1.groups))) {
+            const migrated = this.migrateFromV1(parsedV1);
+            this.saveDirect(migrated);
+            return migrated;
+          }
         }
-        return parsed;
+
+        return createDefaultState();
       } catch (err) {
-        console.error('[StorageManager] Failed to parse local storage, resetting to default.', err);
+        console.error('[StorageManager] Failed to read from localStorage:', err);
         return createDefaultState();
       }
     }
 
-    // Save current state
+    migrateFromV1(v1Data) {
+      const defaultSecId = 'sec_' + Date.now();
+      const students = Array.isArray(v1Data.students) ? v1Data.students : [];
+      const groups = Array.isArray(v1Data.groups) ? v1Data.groups : [];
+
+      return {
+        version: 2,
+        activeSectionId: defaultSecId,
+        sections: [
+          {
+            id: defaultSecId,
+            name: 'Section A',
+            createdAt: new Date().toISOString(),
+            students: students,
+            groups: groups,
+          },
+        ],
+      };
+    }
+
+    saveDirect(dataState) {
+      try {
+        const json = JSON.stringify(dataState);
+        localStorage.setItem(STORAGE_KEY_V2, json);
+
+        const sec = dataState.sections && dataState.sections[0];
+        if (sec) {
+          localStorage.setItem(
+            STORAGE_KEY_V1,
+            JSON.stringify({
+              students: sec.students || [],
+              groups: sec.groups || [],
+              lastSaved: new Date().toISOString(),
+            })
+          );
+        }
+      } catch (e) {
+        console.error('[StorageManager] saveDirect error:', e);
+      }
+    }
+
+    // Save current state (Writes to LocalStorage, IndexedDB, and Native Hard Drive)
     save() {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(this.state));
+        this.saveDirect(this.state);
+        this.persistToIndexedDB(this.state);
+
+        // Native Hard Drive persistence via Python bridge
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.save_to_disk) {
+          window.pywebview.api.save_to_disk(JSON.stringify(this.state, null, 2));
+        }
       } catch (err) {
-        console.error('[StorageManager] Failed to write to localStorage:', err);
+        console.error('[StorageManager] Failed to write to storage:', err);
+      }
+    }
+
+    // --- IndexedDB Mirroring ---
+    initIndexedDB() {
+      if (!window.indexedDB) return;
+      try {
+        const req = window.indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(DB_STORE)) {
+            db.createObjectStore(DB_STORE);
+          }
+        };
+        req.onsuccess = (e) => {
+          this.idb = e.target.result;
+          this.checkIndexedDBFallback();
+        };
+      } catch (err) {
+        console.warn('[StorageManager] IndexedDB not available:', err);
+      }
+    }
+
+    persistToIndexedDB(stateObj) {
+      if (!this.idb) return;
+      try {
+        const tx = this.idb.transaction(DB_STORE, 'readwrite');
+        const store = tx.objectStore(DB_STORE);
+        store.put(stateObj, 'current_state');
+      } catch (e) {
+        console.warn('[StorageManager] IndexedDB put error:', e);
+      }
+    }
+
+    checkIndexedDBFallback() {
+      if (!this.idb) return;
+      try {
+        const tx = this.idb.transaction(DB_STORE, 'readonly');
+        const store = tx.objectStore(DB_STORE);
+        const req = store.get('current_state');
+        req.onsuccess = () => {
+          const dbState = req.result;
+          const activeSec = this.getActiveSection();
+          const isLocalStorageEmpty =
+            !activeSec || (activeSec.students.length === 0 && activeSec.groups.length === 0);
+
+          if (dbState && Array.isArray(dbState.sections) && isLocalStorageEmpty) {
+            console.log('[StorageManager] Restored data from IndexedDB mirror.');
+            this.state = dbState;
+            this.saveDirect(this.state);
+            if (typeof window.refreshAllData === 'function') {
+              window.refreshAllData();
+            } else {
+              if (window.StudentRoster) window.StudentRoster.render();
+              if (window.GroupEngine) window.GroupEngine.render();
+            }
+          }
+        };
+      } catch (e) {
+        console.warn('[StorageManager] checkIndexedDBFallback error:', e);
       }
     }
 
@@ -174,22 +342,25 @@
       const sec = this.getActiveSection();
       if (!sec) return null;
 
+      const memberIds = Array.isArray(groupData.memberIds) ? groupData.memberIds : [];
+
       if (groupData.id) {
         // Update existing group
         const existingIdx = sec.groups.findIndex((g) => g.id === groupData.id);
         if (existingIdx !== -1) {
           const oldGroup = sec.groups[existingIdx];
+          const oldMembers = Array.isArray(oldGroup.memberIds) ? oldGroup.memberIds : [];
 
           // Unassign students removed from this group
-          (oldGroup.memberIds || []).forEach((oldId) => {
-            if (!groupData.memberIds.includes(oldId)) {
+          oldMembers.forEach((oldId) => {
+            if (!memberIds.includes(oldId)) {
               const stu = sec.students.find((s) => s.id === oldId);
               if (stu) stu.groupId = null;
             }
           });
 
           // Assign students added to this group
-          groupData.memberIds.forEach((newId) => {
+          memberIds.forEach((newId) => {
             const stu = sec.students.find((s) => s.id === newId);
             if (stu) stu.groupId = groupData.id;
           });
@@ -197,6 +368,7 @@
           sec.groups[existingIdx] = {
             ...oldGroup,
             ...groupData,
+            memberIds: memberIds,
             updatedAt: new Date().toISOString(),
           };
           this.save();
@@ -214,14 +386,14 @@
         status: groupData.status || 'Ideation',
         score: groupData.score || '',
         nextDeadline: groupData.nextDeadline || '',
-        memberIds: groupData.memberIds || [],
+        memberIds: memberIds,
         reviewCount: groupData.reviewCount || 0,
         reviews: groupData.reviews || [],
         createdAt: new Date().toISOString(),
       };
 
       // Mark assigned students
-      newGroup.memberIds.forEach((mId) => {
+      memberIds.forEach((mId) => {
         const stu = sec.students.find((s) => s.id === mId);
         if (stu) stu.groupId = newGroupId;
       });
